@@ -59,6 +59,8 @@ class Model(nn.Module):
         self.decode_dim = configs.c_out
         self.temporalDecoderHidden=configs.d_ff
         dropout=configs.dropout
+        self.seq_norm = configs.seq_norm
+        self.final_channels = configs.c_out
 
         
         freq_map = {'h': 4, 't': 5, 's': 6,
@@ -86,21 +88,33 @@ class Model(nn.Module):
             
         
     def forecast(self, x_enc, x_mark_enc, x_dec, batch_y_mark):
-        # Normalization
-        means = x_enc.mean(1, keepdim=True).detach()
-        x_enc = x_enc - means
-        stdev = torch.sqrt(torch.var(x_enc, dim=1, keepdim=True, unbiased=False) + 1e-5)
-        x_enc /= stdev
+        if self.seq_norm == 'Diff':
+            # 提取最后一个时间步的数据并进行差分操作
+            last_index = self.seq_len - 1
+            seq_last = x_enc[:, last_index].detach()
+            seq_last = seq_last.reshape(x_enc.size(0), 1)
+            x_enc = x_enc - seq_last
+        elif self.seq_norm == 'RevIN':
+            means = x_enc.mean(1, keepdim=True).detach()
+            x_enc = x_enc - means
+            stdev = torch.sqrt(
+                torch.var(x_enc, dim=1, keepdim=True, unbiased=False) + 1e-5)
+            x_enc /= stdev
+        else:
+            pass
         
         feature = self.feature_encoder(batch_y_mark)
         hidden = self.encoders(torch.cat([x_enc, feature.reshape(feature.shape[0], -1)], dim=-1))
         decoded = self.decoders(hidden).reshape(hidden.shape[0], self.pred_len, self.decode_dim)
         dec_out = self.temporalDecoder(torch.cat([feature[:,self.seq_len:], decoded], dim=-1)).squeeze(-1) + self.residual_proj(x_enc)
-        
-        
-        # De-Normalization 
-        dec_out = dec_out * (stdev[:, 0].unsqueeze(1).repeat(1, self.pred_len))
-        dec_out = dec_out + (means[:, 0].unsqueeze(1).repeat(1, self.pred_len))
+
+        if self.seq_norm == 'Diff':
+            # 将差分操作的影响逆转，恢复到原始数据的相对尺度
+            dec_out = dec_out + seq_last
+        elif self.seq_norm == 'RevIN':
+            dec_out = dec_out * stdev + means
+        else:
+            pass
         return dec_out
     
     def imputation(self, x_enc, x_mark_enc, x_dec, batch_y_mark, mask):

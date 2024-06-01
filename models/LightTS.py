@@ -68,7 +68,8 @@ class Model(nn.Module):
             self.dropout = nn.Dropout(configs.dropout)
             self.projection = nn.Linear(configs.enc_in * configs.seq_len, configs.num_class)
         self._build()
-
+        self.seq_norm = configs.seq_norm
+        self.final_channels = configs.c_out
     def _build(self):
         self.layer_1 = IEBlock(
             input_dim=self.chunk_size,
@@ -128,7 +129,31 @@ class Model(nn.Module):
         return out
 
     def forecast(self, x_enc, x_mark_enc, x_dec, x_mark_dec):
-        return self.encoder(x_enc)
+        if self.seq_norm == 'Diff':
+            # 提取最后一个时间步的数据并进行差分操作
+            last_index = self.seq_len - 1
+            seq_last = x_enc[:, last_index, :].detach()
+            seq_last = seq_last.reshape(x_enc.size(0), 1, self.final_channels)
+            x_enc = x_enc - seq_last
+        elif self.seq_norm == 'RevIN':
+            means = x_enc.mean(1, keepdim=True).detach()
+            x_enc = x_enc - means
+            stdev = torch.sqrt(
+                torch.var(x_enc, dim=1, keepdim=True, unbiased=False) + 1e-5)
+            x_enc /= stdev
+        else:
+            pass
+
+        dec_out = self.encoder(x_enc)
+
+        if self.seq_norm == 'Diff':
+            # 将差分操作的影响逆转，恢复到原始数据的相对尺度
+            dec_out = dec_out + seq_last
+        elif self.seq_norm == 'RevIN':
+            dec_out = dec_out * stdev + means
+        else:
+            pass
+        return dec_out
 
     def imputation(self, x_enc, x_mark_enc, x_dec, x_mark_dec, mask):
         return self.encoder(x_enc)

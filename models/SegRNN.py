@@ -17,7 +17,8 @@ class Model(nn.Module):
         self.enc_in = configs.enc_in
         self.d_model = configs.d_model
         self.dropout = configs.dropout
-
+        self.seq_norm = configs.seq_norm
+        self.final_channels = configs.c_out
         self.task_name = configs.task_name
         if self.task_name == 'classification' or self.task_name == 'anomaly_detection' or self.task_name == 'imputation':
             self.pred_len = configs.seq_len
@@ -82,8 +83,31 @@ class Model(nn.Module):
         return y
 
     def forecast(self, x_enc):
-        # Encoder
-        return self.encoder(x_enc)
+        if self.seq_norm == 'Diff':
+            # 提取最后一个时间步的数据并进行差分操作
+            last_index = self.seq_len - 1
+            seq_last = x_enc[:, last_index, :].detach()
+            seq_last = seq_last.reshape(x_enc.size(0), 1, self.final_channels)
+            x_enc = x_enc - seq_last
+        elif self.seq_norm == 'RevIN':
+            means = x_enc.mean(1, keepdim=True).detach()
+            x_enc = x_enc - means
+            stdev = torch.sqrt(
+                torch.var(x_enc, dim=1, keepdim=True, unbiased=False) + 1e-5)
+            x_enc /= stdev
+        else:
+            pass
+
+        dec_out = self.encoder(x_enc)
+
+        if self.seq_norm == 'Diff':
+            # 将差分操作的影响逆转，恢复到原始数据的相对尺度
+            dec_out = dec_out + seq_last
+        elif self.seq_norm == 'RevIN':
+            dec_out = dec_out * stdev + means
+        else:
+            pass
+        return dec_out
 
     def imputation(self, x_enc):
         # Encoder

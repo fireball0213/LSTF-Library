@@ -1,5 +1,5 @@
 import torch.nn as nn
-
+import torch
 
 class ResBlock(nn.Module):
     def __init__(self, configs):
@@ -36,14 +36,38 @@ class Model(nn.Module):
                                     for _ in range(configs.e_layers)])
         self.pred_len = configs.pred_len
         self.projection = nn.Linear(configs.seq_len, configs.pred_len)
+        self.seq_norm = configs.seq_norm
+        self.seq_len=configs.seq_len
+        self.final_channels = configs.c_out
 
     def forecast(self, x_enc, x_mark_enc, x_dec, x_mark_dec, mask=None):
+        if self.seq_norm == 'Diff':
+            # 提取最后一个时间步的数据并进行差分操作
+            last_index = self.seq_len - 1
+            seq_last = x_enc[:, last_index, :].detach()
+            seq_last = seq_last.reshape(x_enc.size(0), 1, self.final_channels)
+            x_enc = x_enc - seq_last
+        elif self.seq_norm == 'RevIN':
+            means = x_enc.mean(1, keepdim=True).detach()
+            x_enc = x_enc - means
+            stdev = torch.sqrt(
+                torch.var(x_enc, dim=1, keepdim=True, unbiased=False) + 1e-5)
+            x_enc /= stdev
+        else:
+            pass
 
         # x: [B, L, D]
         for i in range(self.layer):
             x_enc = self.model[i](x_enc)
         enc_out = self.projection(x_enc.transpose(1, 2)).transpose(1, 2)
 
+        if self.seq_norm == 'Diff':
+            # 将差分操作的影响逆转，恢复到原始数据的相对尺度
+            enc_out = enc_out + seq_last
+        elif self.seq_norm == 'RevIN':
+            enc_out = enc_out * stdev + means
+        else:
+            pass
         return enc_out
 
     def forward(self, x_enc, x_mark_enc, x_dec, x_mark_dec, mask=None):

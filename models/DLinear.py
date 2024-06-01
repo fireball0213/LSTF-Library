@@ -24,6 +24,7 @@ class Model(nn.Module):
         self.decompsition = series_decomp(configs.moving_avg)
         self.individual = individual
         self.channels = configs.enc_in
+        self.configs = configs
 
         if self.individual:
             self.Linear_Seasonal = nn.ModuleList()
@@ -64,8 +65,17 @@ class Model(nn.Module):
                 seasonal_output[:, i, :] = self.Linear_Seasonal[i](seasonal_init[:, i, :])
                 trend_output[:, i, :] = self.Linear_Trend[i](trend_init[:, i, :])
         else:
-            seasonal_output = self.Linear_Seasonal(seasonal_init)
-            trend_output = self.Linear_Trend(trend_init)
+            if self.configs.seq_norm=='Diff':
+                last_index = self.seq_len - 1
+                trend_seq_last = trend_init[:, :, last_index].reshape(x.size(0), 1, 1).detach()
+                seasonal_seq_last = seasonal_init[:, :, last_index].reshape(x.size(0), 1, 1).detach()
+                trend_init = trend_init - trend_seq_last
+                seasonal_init = seasonal_init - seasonal_seq_last
+                trend_output = self.Linear_Trend(trend_init)+ trend_seq_last
+                seasonal_output = self.Linear_Seasonal(seasonal_init)+ seasonal_seq_last
+            else:#if self.configs.seq_norm=='None':
+                trend_output = self.Linear_Trend(trend_init)
+                seasonal_output = self.Linear_Seasonal(seasonal_init)
         x = seasonal_output + trend_output
         return x.permute(0, 2, 1)
 

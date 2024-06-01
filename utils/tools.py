@@ -13,8 +13,8 @@ def timeit(func):
         start = time.time()
         result = func(*args, **kwargs)
         end = time.time() - start
-        # print(f'{func.__name__} cost {end:.4f}s')
-        print(f'{end:.4f}s')
+        # print(f' {func.__name__} {end:.1f}s',end=" ")
+        print(f' {end:.0f}s',end=" ")
         return result
     return wrapper
 import os

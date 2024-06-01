@@ -11,51 +11,56 @@ import random
 import numpy as np
 
 DAY=96
-def run(args):
-    if args.task_name == 'long_term_forecast':
-        Exp = Exp_Long_Term_Forecast
-    elif args.task_name == 'short_term_forecast':
-        Exp = Exp_Short_Term_Forecast
-    elif args.task_name == 'imputation':
-        Exp = Exp_Imputation
-    elif args.task_name == 'anomaly_detection':
-        Exp = Exp_Anomaly_Detection
-    elif args.task_name == 'classification':
-        Exp = Exp_Classification
-    else:
-        Exp = Exp_Long_Term_Forecast
 
+
+def reset_args(args):
+    if args.features == 'S':
+        args.enc_in = 1
+        args.dec_in = 1
+        args.c_out = 1
+    if args.model == 'TimesNet' or args.model =='Autoformer' or args.model =='FiLM':
+        args.pred_len = 256
+    # elif args.model == 'TiDE':
+    #     args.dropout = 0.3
+    #     args.learning_rate = 0.1
+    elif args.model == 'DLinear' :
+        args.seq_norm='Diff'
+        args.train_epochs=1#增大epoch有用
+    elif args.model == 'TSMixer':
+        args.seq_norm = 'RevIN'
+        args.train_epochs=1
+    elif args.model == 'ModernTCN':
+        args.seq_norm='Diff'
+        args.train_epochs = 10
+    else:
+        args.seq_norm = 'RevIN'
+        args.train_epochs = 10
+    return args
+
+
+def run(args):
+    args.seq_len = DAY * 8
+    args.label_len = DAY
+    args.pred_len = DAY * 4
+    args.d_model = 64
+    args.d_ff = 128
+    args = reset_args(args)
+
+    Exp = Exp_Long_Term_Forecast
     # print('Args in experiment:')
     # print_args(args)
-
     if args.is_training:
         for ii in range(args.itr):
             # setting record of experiments
             exp = Exp(args)  # set experiments
             setting = '{}_{}_{}_{}_seq{}_ll{}_pred{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}_{}'.format(
                 # args.task_name,
-                args.model_id,
-                args.data,
-                args.model,
-                args.features,
-                args.seq_len,
-                args.label_len,
-                args.pred_len,
-                args.d_model,
-                args.n_heads,
-                args.e_layers,
-                args.d_layers,
-                args.d_ff,
-                args.expand,
-                args.d_conv,
-                args.factor,
-                args.embed,
-                args.distil,
-                args.des, ii)
-
+                args.model_id, args.data, args.model, args.features,
+                args.seq_len, args.label_len, args.pred_len,
+                args.d_model, args.n_heads, args.e_layers, args.d_layers, args.d_ff,
+                args.expand, args.d_conv, args.factor, args.embed, args.distil, args.des, ii)
             # print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
             exp.train(setting)
-
             # print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
             exp.test(setting)
             torch.cuda.empty_cache()
@@ -63,31 +68,14 @@ def run(args):
         ii = 0
         setting = '{}_{}_{}_{}_seq{}_ll{}_pred{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}_{}'.format(
             # args.task_name,
-            args.model_id,
-            args.data,
-            args.model,
-            args.features,
-            args.seq_len,
-            args.label_len,
-            args.pred_len,
-            args.d_model,
-            args.n_heads,
-            args.e_layers,
-            args.d_layers,
-            args.d_ff,
-            args.expand,
-            args.d_conv,
-            args.factor,
-            args.embed,
-            args.distil,
-            args.des, ii)
-
+            args.model_id, args.data, args.model, args.features,
+            args.seq_len, args.label_len, args.pred_len,
+            args.d_model, args.n_heads, args.e_layers, args.d_layers, args.d_ff,
+            args.expand, args.d_conv, args.factor, args.embed, args.distil, args.des, ii)
         exp = Exp(args)  # set experiments
         # print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
         exp.test(setting)
         torch.cuda.empty_cache()
-
-
 if __name__ == '__main__':
     fix_seed = 2021
     random.seed(fix_seed)
@@ -129,6 +117,7 @@ if __name__ == '__main__':
     # anomaly detection task
     parser.add_argument('--anomaly_ratio', type=float, default=0.25, help='prior anomaly ratio (%)')
 
+    parser.add_argument('--seq_norm', type=str, default='RevIN', help='batch_norm used in NN，options: [None,Diff,RevIN]')
     # model define
     parser.add_argument('--expand', type=int, default=2, help='expansion factor for Mamba')
     parser.add_argument('--d_conv', type=int, default=4, help='conv kernel size for Mamba')
@@ -143,7 +132,7 @@ if __name__ == '__main__':
     parser.add_argument('--d_layers', type=int, default=1, help='num of decoder layers')
     parser.add_argument('--d_ff', type=int, default=2048, help='dimension of fcn')
     parser.add_argument('--moving_avg', type=int, default=25, help='window size of moving average')
-    parser.add_argument('--factor', type=int, default=1, help='attn factor')
+    parser.add_argument('--factor', type=int, default=3, help='attn factor')
     parser.add_argument('--distil', action='store_false',
                         help='whether to use distilling in encoder, using this argument means not using distilling',
                         default=True)
@@ -165,7 +154,7 @@ if __name__ == '__main__':
                         help='the length of segmen-wise iteration of SegRNN')
 
     # optimization
-    parser.add_argument('--num_workers', type=int, default=4, help='data loader num workers')
+    parser.add_argument('--num_workers', type=int, default=1, help='data loader num workers')
     parser.add_argument('--itr', type=int, default=1, help='experiments times')
     parser.add_argument('--train_epochs', type=int, default=10, help='train epochs')
     parser.add_argument('--batch_size', type=int, default=32, help='batch size of train input data')
@@ -229,26 +218,42 @@ if __name__ == '__main__':
     args.root_path='./data/fhyc/'
     args.data_path='data_merge_0523.csv'
     args.features='S'
-    args.seq_len=DAY*8
-    args.label_len=DAY*4
-    args.pred_len=DAY*4
 
     # args.is_training=0
 
-    args.d_model = 64
-    args.d_ff = 128
-    args.num_workers=1
     for args.model in [
-        # 'DLinear',
+        'DLinear',
+        'ModernTCN',
+        'TSMixer',
         'PatchTST',
         'TiDE',
-        'TimeMixer',
         'iTransformer',
-        'Nonstationary_Transformer',
-        'FiLM',
-        'TSMixer',
-        'Crossformer',
-        'MICN',
-        'Pyraformer',
+        'LightTS',
+        'SegRNN',
+
+        # 'TimesNet',
+        # 'Autoformer',
+        # 'FiLM',
+
+        #太慢
+        # 'Nonstationary_Transformer',
+        # 'Crossformer',
+        # 'Payraformer',
+        #
+        # #bug
+        # 'TimeMixer',
     ]:
-        run(args)
+        args.load_model=False
+        # for args.label_len in [0,DAY//2,DAY,DAY*2]:
+        #     print(f"label_len: {args.label_len}",end=' ')
+        #     run(args)
+        # for args.seq_norm in ['Diff']:#'None',,'RevIN'
+        #     print(f"seq_norm: {args.seq_norm}",end=' ')
+        #     run(args)
+        for args.loss in ['MAE','SMAPE','MASE','MSE']:
+            print(f"loss: {args.loss}",end=' ')
+            try:
+                run(args)
+            except Exception as e:
+                print(f"Model {args.model} encountered an error: {e}")
+                continue

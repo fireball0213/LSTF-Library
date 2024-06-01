@@ -9,6 +9,7 @@ import os
 import time
 import warnings
 import numpy as np
+from utils.losses import mape_loss, mase_loss, smape_loss
 from utils.dtw_metric import dtw,accelerated_dtw
 from utils.augmentation import run_augmentation,run_augmentation_single
 
@@ -34,9 +35,17 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         model_optim = optim.Adam(self.model.parameters(), lr=self.args.learning_rate)
         return model_optim
 
-    def _select_criterion(self):
-        criterion = nn.MSELoss()
-        return criterion
+    def _select_criterion(self, loss_name='MSE'):
+        if loss_name == 'MSE':
+            return nn.MSELoss()
+        elif loss_name == 'MAPE':
+            return mape_loss()
+        elif loss_name == 'MASE':
+            return mase_loss()
+        elif loss_name == 'SMAPE':
+            return smape_loss()
+        elif loss_name == 'MAE':
+            return nn.L1Loss(),
 
     def vali(self, vali_data, vali_loader, criterion):
         total_loss = []
@@ -74,13 +83,13 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         self.model.train()
         return total_loss
 
-
-
+    @timeit
     def train(self, setting):
         # 检查是否有已经训练好的模型
         path = os.path.join(self.args.checkpoints, setting)
         best_model_path = path + '/' + 'checkpoint.pth'
-
+        # print(path)
+        print(self.args.model, end=' ')
         if os.path.exists(best_model_path) and self.args.load_model:
             # print('__l', self.args.model, end=' ')
             # self.model.load_state_dict(torch.load(best_model_path))
@@ -163,27 +172,28 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 vali_loss = self.vali(vali_data, vali_loader, criterion)
                 test_loss = self.vali(test_data, test_loader, criterion)
 
-                print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f} cost time: {5:.1f}".format(
-                    epoch + 1, train_steps, train_loss, vali_loss, test_loss, time.time() - epoch_time))
+                # print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f} cost time: {5:.1f}".format(
+                #     epoch + 1, train_steps, train_loss, vali_loss, test_loss, time.time() - epoch_time))
                 early_stopping(vali_loss, self.model, path)
                 if early_stopping.early_stop:
-                    print("Early stopping")
+                    # print("Early stopping")
                     break
 
                 adjust_learning_rate(model_optim, epoch + 1, self.args)
 
             if os.path.exists(best_model_path) and self.args.load_model:
-                print('_l', end=' ')
+                # print('_l', end=' ')
                 self.model.load_state_dict(torch.load(best_model_path))
             else:
-                print('no model saved',end=' ')
+                pass
+                # print('no model saved',end=' ')
             return self.model
 
     # @timeit
     def test(self, setting, load_model=True):
         test_data, test_loader = self._get_data(flag='test')
         if load_model:
-            print('__l',self.args.model,end=' ')
+            print('l',end=' ')
             self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
 
         preds = []
