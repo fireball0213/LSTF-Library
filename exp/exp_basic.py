@@ -2,7 +2,7 @@ import os
 import torch
 from models import Autoformer, Transformer, TimesNet, Nonstationary_Transformer, DLinear, FEDformer, \
     Informer, LightTS, Reformer, ETSformer, Pyraformer, PatchTST, MICN, Crossformer, FiLM, iTransformer, \
-    Koopa, TiDE, FreTS, TimeMixer, TSMixer, SegRNN, MambaSimple, Mamba, TemporalFusionTransformer
+    Koopa, TiDE, FreTS, TimeMixer, TSMixer, SegRNN, MambaSimple#, Mamba, TemporalFusionTransformer
 
 
 class Exp_Basic(object):
@@ -29,11 +29,11 @@ class Exp_Basic(object):
             'TiDE': TiDE,
             'FreTS': FreTS,
             'MambaSimple': MambaSimple,
-            'Mamba': Mamba,
+            # 'Mamba': Mamba,
             'TimeMixer': TimeMixer,
             'TSMixer': TSMixer,
             'SegRNN': SegRNN,
-            'TemporalFusionTransformer': TemporalFusionTransformer
+            # 'TemporalFusionTransformer': TemporalFusionTransformer
         }
         self.device = self._acquire_device()
         self.model = self._build_model().to(self.device)
@@ -47,7 +47,7 @@ class Exp_Basic(object):
             os.environ["CUDA_VISIBLE_DEVICES"] = str(
                 self.args.gpu) if not self.args.use_multi_gpu else self.args.devices
             device = torch.device('cuda:{}'.format(self.args.gpu))
-            print('Use GPU: cuda:{}'.format(self.args.gpu))
+            # print('Use GPU: cuda:{}'.format(self.args.gpu))
         else:
             device = torch.device('cpu')
             print('Use CPU')

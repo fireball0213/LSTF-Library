@@ -5,10 +5,19 @@ import torch
 import matplotlib.pyplot as plt
 import pandas as pd
 import math
-
+import time
 plt.switch_backend('agg')
 
-
+def timeit(func):
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        result = func(*args, **kwargs)
+        end = time.time() - start
+        # print(f'{func.__name__} cost {end:.4f}s')
+        print(f'{end:.4f}s')
+        return result
+    return wrapper
+import os
 def adjust_learning_rate(optimizer, epoch, args):
     # lr = args.learning_rate * (0.2 ** (epoch // 2))
     if args.lradj == 'type1':
@@ -24,7 +33,7 @@ def adjust_learning_rate(optimizer, epoch, args):
         lr = lr_adjust[epoch]
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
-        print('Updating learning rate to {}'.format(lr))
+        # print('Updating learning rate to {}'.format(lr))
 
 
 class EarlyStopping:
@@ -44,7 +53,8 @@ class EarlyStopping:
             self.save_checkpoint(val_loss, model, path)
         elif score < self.best_score + self.delta:
             self.counter += 1
-            print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
+            print('o', end='')
+            # print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
             if self.counter >= self.patience:
                 self.early_stop = True
         else:
@@ -54,7 +64,9 @@ class EarlyStopping:
 
     def save_checkpoint(self, val_loss, model, path):
         if self.verbose:
-            print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
+            pass
+            # print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
+        print('s', end='')
         torch.save(model.state_dict(), path + '/' + 'checkpoint.pth')
         self.val_loss_min = val_loss
 
@@ -82,7 +94,7 @@ def visual(true, preds=None, name='./pic/test.pdf'):
     """
     Results visualization
     """
-    plt.figure()
+    plt.figure(figsize=(16, 5))
     plt.plot(true, label='GroundTruth', linewidth=2)
     if preds is not None:
         plt.plot(preds, label='Prediction', linewidth=2)

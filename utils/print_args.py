@@ -1,21 +1,21 @@
 def print_args(args):
     print("\033[1m" + "Basic Config" + "\033[0m")
-    print(f'  {"Task Name:":<20}{args.task_name:<20}{"Is Training:":<20}{args.is_training:<20}')
+    # print(f'  {"Task Name:":<20}{args.task_name:<20}{"Is Training:":<20}{args.is_training:<20}')
     print(f'  {"Model ID:":<20}{args.model_id:<20}{"Model:":<20}{args.model:<20}')
-    print()
+    # print()
 
-    print("\033[1m" + "Data Loader" + "\033[0m")
-    print(f'  {"Data:":<20}{args.data:<20}{"Root Path:":<20}{args.root_path:<20}')
-    print(f'  {"Data Path:":<20}{args.data_path:<20}{"Features:":<20}{args.features:<20}')
-    print(f'  {"Target:":<20}{args.target:<20}{"Freq:":<20}{args.freq:<20}')
-    print(f'  {"Checkpoints:":<20}{args.checkpoints:<20}')
-    print()
+    # print("\033[1m" + "Data Loader" + "\033[0m")
+    # print(f'  {"Data:":<20}{args.data:<20}{"Root Path:":<20}{args.root_path:<20}')
+    # print(f'  {"Data Path:":<20}{args.data_path:<20}{"Features:":<20}{args.features:<20}')
+    # print(f'  {"Target:":<20}{args.target:<20}{"Freq:":<20}{args.freq:<20}')
+    # print(f'  {"Checkpoints:":<20}{args.checkpoints:<20}')
+    # print()
 
     if args.task_name in ['long_term_forecast', 'short_term_forecast']:
         print("\033[1m" + "Forecasting Task" + "\033[0m")
         print(f'  {"Seq Len:":<20}{args.seq_len:<20}{"Label Len:":<20}{args.label_len:<20}')
         print(f'  {"Pred Len:":<20}{args.pred_len:<20}{"Seasonal Patterns:":<20}{args.seasonal_patterns:<20}')
-        print(f'  {"Inverse:":<20}{args.inverse:<20}')
+        # print(f'  {"Inverse:":<20}{args.inverse:<20}')
         print()
 
     if args.task_name == 'imputation':
@@ -48,10 +48,10 @@ def print_args(args):
     print(f'  {"Lradj:":<20}{args.lradj:<20}{"Use Amp:":<20}{args.use_amp:<20}')
     print()
 
-    print("\033[1m" + "GPU" + "\033[0m")
-    print(f'  {"Use GPU:":<20}{args.use_gpu:<20}{"GPU:":<20}{args.gpu:<20}')
-    print(f'  {"Use Multi GPU:":<20}{args.use_multi_gpu:<20}{"Devices:":<20}{args.devices:<20}')
-    print()
+    # print("\033[1m" + "GPU" + "\033[0m")
+    # print(f'  {"Use GPU:":<20}{args.use_gpu:<20}{"GPU:":<20}{args.gpu:<20}')
+    # print(f'  {"Use Multi GPU:":<20}{args.use_multi_gpu:<20}{"Devices:":<20}{args.devices:<20}')
+    # print()
 
     print("\033[1m" + "De-stationary Projector Params" + "\033[0m")
     p_hidden_dims_str = ', '.join(map(str, args.p_hidden_dims))

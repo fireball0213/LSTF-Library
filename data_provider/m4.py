@@ -23,7 +23,7 @@ from glob import glob
 
 import numpy as np
 import pandas as pd
-import patoolib
+# import patoolib
 from tqdm import tqdm
 import logging
 import os
@@ -129,10 +129,10 @@ class M4Meta:
     }  # from interpretable.gin
 
 
-def load_m4_info() -> pd.DataFrame:
-    """
-    Load M4Info file.
-
-    :return: Pandas DataFrame of M4Info.
-    """
-    return pd.read_csv(INFO_FILE_PATH)
+# def load_m4_info() -> pd.DataFrame:
+#     """
+#     Load M4Info file.
+#
+#     :return: Pandas DataFrame of M4Info.
+#     """
+#     return pd.read_csv(INFO_FILE_PATH)
