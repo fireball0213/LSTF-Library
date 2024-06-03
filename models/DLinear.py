@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from layers.Autoformer_EncDec import series_decomp
-
+from utils.decomposition import decomposition_method
 
 class Model(nn.Module):
     """
@@ -21,7 +21,8 @@ class Model(nn.Module):
         else:
             self.pred_len = configs.pred_len
         # Series decomposition block from Autoformer
-        self.decompsition = series_decomp(configs.moving_avg)
+        # self.decompsition = series_decomp(configs.kernel_size)#原始分解核
+        self.decompsition = decomposition_method(configs.decomp_method, configs)
         self.individual = individual
         self.channels = configs.enc_in
         self.configs = configs

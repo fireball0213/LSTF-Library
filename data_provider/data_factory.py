@@ -46,7 +46,7 @@ def data_provider(args, flag):
         seasonal_patterns=args.seasonal_patterns
     )
     # print(flag, len(data_set), end=' ')
-    a=time.time()
+    # a=time.time()
     data_loader = DataLoader(
         data_set,
         batch_size=batch_size,

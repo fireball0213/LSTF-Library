@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import math
 import time
-plt.switch_backend('agg')
+# plt.switch_backend('agg')
 
 def timeit(func):
     def wrapper(*args, **kwargs):
@@ -67,6 +67,7 @@ class EarlyStopping:
             pass
             # print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
         print('s', end='')
+        # print(path)
         torch.save(model.state_dict(), path + '/' + 'checkpoint.pth')
         self.val_loss_min = val_loss
 

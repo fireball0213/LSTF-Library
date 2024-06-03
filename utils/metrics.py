@@ -30,12 +30,25 @@ def MAPE(pred, true):
 def MSPE(pred, true):
     return np.mean(np.square((pred - true) / true))
 
+def mape_dimension(predict, target):
+    # 先找到所有非零的位置
+    non_zero = target != 0
+    # 初始化 mape_value 数组
+    mape_value = np.zeros_like(target)
+    # 只在非零位置上计算 MAPE
+    mape_value[non_zero] = np.abs((target[non_zero] - predict[non_zero]) / target[non_zero])
+    # 计算指定维度上的所有MAPE值
+    dimension_mape = np.mean(mape_value, axis=0)
+
+    date_mape = np.mean(mape_value, axis=1)
+    return np.mean(mape_value),dimension_mape,date_mape
 
 def metric(pred, true):
     mae = MAE(pred, true)
     mse = MSE(pred, true)
     rmse = RMSE(pred, true)
-    mape = MAPE(pred, true)
+    # mape = MAPE(pred, true)
     mspe = MSPE(pred, true)
+    mape, dimension_mape, date_mape= mape_dimension(pred, true)
 
-    return mae, mse, rmse, mape, mspe
+    return mae, mse, rmse, mape, mspe, dimension_mape, date_mape

@@ -38,14 +38,8 @@ class Exp_Long_Term_Forecast(Exp_Basic):
     def _select_criterion(self, loss_name='MSE'):
         if loss_name == 'MSE':
             return nn.MSELoss()
-        elif loss_name == 'MAPE':
-            return mape_loss()
-        elif loss_name == 'MASE':
-            return mase_loss()
-        elif loss_name == 'SMAPE':
-            return smape_loss()
         elif loss_name == 'MAE':
-            return nn.L1Loss(),
+            return nn.L1Loss()
 
     def vali(self, vali_data, vali_loader, criterion):
         total_loss = []
@@ -85,21 +79,22 @@ class Exp_Long_Term_Forecast(Exp_Basic):
 
     @timeit
     def train(self, setting):
+        a = time.time()
         # 检查是否有已经训练好的模型
         path = os.path.join(self.args.checkpoints, setting)
         best_model_path = path + '/' + 'checkpoint.pth'
         # print(path)
         print(self.args.model, end=' ')
         if os.path.exists(best_model_path) and self.args.load_model:
-            # print('__l', self.args.model, end=' ')
-            # self.model.load_state_dict(torch.load(best_model_path))
+            print('load', self.args.model, end=' ')
+            self.model.load_state_dict(torch.load(best_model_path))
             pass
 
         else:#需要训练模型
+            time_now = time.time()
             train_data, train_loader = self._get_data(flag='train')
             vali_data, vali_loader = self._get_data(flag='val')
             test_data, test_loader = self._get_data(flag='test')
-            # print()
 
             if not os.path.exists(path):
                 os.makedirs(path)
@@ -109,7 +104,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
             train_steps = len(train_loader)
             early_stopping = EarlyStopping(patience=self.args.patience, verbose=True)
             model_optim = self._select_optimizer()
-            criterion = self._select_criterion()
+            criterion = self._select_criterion(loss_name=self.args.loss)
             if self.args.use_amp:
                 scaler = torch.cuda.amp.GradScaler()
             for epoch in range(self.args.train_epochs):
@@ -143,6 +138,10 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                             batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
                             loss = criterion(outputs, batch_y)
                             train_loss.append(loss.item())
+
+                            scaler.scale(loss).backward()
+                            scaler.step(model_optim)
+                            scaler.update()
                     else:
                         outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0 if self.args.output_attention else None]
 
@@ -152,6 +151,9 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                         loss = criterion(outputs, batch_y)
                         train_loss.append(loss.item())
 
+                        loss.backward()
+                        model_optim.step()
+
                     # if (i + 1) % 100 == 0:
                     #     print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()),end=' ')
                     #     speed = (time.time() - time_now) / iter_count
@@ -160,13 +162,6 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                     #     iter_count = 0
                     #     time_now = time.time()
 
-                    if self.args.use_amp:
-                        scaler.scale(loss).backward()
-                        scaler.step(model_optim)
-                        scaler.update()
-                    else:
-                        loss.backward()
-                        model_optim.step()
 
                 train_loss = np.average(train_loss)
                 vali_loss = self.vali(vali_data, vali_loader, criterion)
@@ -181,8 +176,8 @@ class Exp_Long_Term_Forecast(Exp_Basic):
 
                 adjust_learning_rate(model_optim, epoch + 1, self.args)
 
-            if os.path.exists(best_model_path) and self.args.load_model:
-                # print('_l', end=' ')
+            if os.path.exists(best_model_path) :#and self.args.load_model
+                print('_l', end=' ')
                 self.model.load_state_dict(torch.load(best_model_path))
             else:
                 pass
@@ -190,9 +185,9 @@ class Exp_Long_Term_Forecast(Exp_Basic):
             return self.model
 
     # @timeit
-    def test(self, setting, load_model=True):
+    def test(self, setting):
         test_data, test_loader = self._get_data(flag='test')
-        if load_model:
+        if self.args.load_model:
             print('l',end=' ')
             self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
 
@@ -246,14 +241,14 @@ class Exp_Long_Term_Forecast(Exp_Basic):
 
                 preds.append(pred)
                 trues.append(true)
-                if i % 20 == 0:
-                    input = batch_x.detach().cpu().numpy()
-                    if test_data.scale and self.args.inverse:
-                        shape = input.shape
-                        input = test_data.inverse_transform(input.squeeze(0)).reshape(shape)
-                    gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
-                    pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
-                    visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
+                # if i % 400 == 0:
+                #     input = batch_x.detach().cpu().numpy()
+                #     if test_data.scale and self.args.inverse:
+                #         shape = input.shape
+                #         input = test_data.inverse_transform(input.squeeze(0)).reshape(shape)
+                #     gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
+                #     pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
+                #     visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
 
         preds = np.array(preds)
         trues = np.array(trues)
@@ -287,7 +282,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         #     dtw = -999
             
 
-        mae, mse, rmse, mape, mspe = metric(preds, trues)
+        mae, mse, rmse, mape, mspe, dimension_mape, date_mape = metric(preds, trues)
         print('mae:{:.2f}, mape:{:.5f}'.format( mae,mape))
         f = open("result_long_term_forecast.txt", 'a')
         f.write(setting + "  \n")
@@ -300,4 +295,4 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         np.save(folder_path + 'pred.npy', preds)
         np.save(folder_path + 'true.npy', trues)
 
-        return
+        return dimension_mape, date_mape

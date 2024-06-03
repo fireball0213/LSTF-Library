@@ -1,5 +1,6 @@
 import argparse
 import os
+import matplotlib.pyplot as plt
 import torch
 from exp.exp_long_term_forecasting import Exp_Long_Term_Forecast
 from exp.exp_imputation import Exp_Imputation
@@ -9,9 +10,17 @@ from exp.exp_classification import Exp_Classification
 from utils.print_args import print_args
 import random
 import numpy as np
-
+import time
+from utils.data_visualizer import plot_combined_mape
 DAY=96
-
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 def reset_args(args):
     if args.features == 'S':
@@ -24,21 +33,25 @@ def reset_args(args):
     #     args.dropout = 0.3
     #     args.learning_rate = 0.1
     elif args.model == 'DLinear' :
+        args.loss='MAE'
         args.seq_norm='Diff'
         args.train_epochs=1#增大epoch有用
     elif args.model == 'TSMixer':
-        args.seq_norm = 'RevIN'
-        args.train_epochs=1
-    elif args.model == 'ModernTCN':
+        # args.loss = 'MASE'
+        args.seq_norm = 'None'
+        args.train_epochs=10
+    elif args.model == 'ModernTCN' or args.model == 'PatchTST':
+        # args.loss = 'MASE'
         args.seq_norm='Diff'
         args.train_epochs = 10
     else:
+        # args.loss = 'MASE'
         args.seq_norm = 'RevIN'
         args.train_epochs = 10
     return args
 
 
-def run(args):
+def run(args,fix_seed):
     args.seq_len = DAY * 8
     args.label_len = DAY
     args.pred_len = DAY * 4
@@ -51,18 +64,26 @@ def run(args):
     # print_args(args)
     if args.is_training:
         for ii in range(args.itr):
+            set_seed(fix_seed)  # 每次实验重新设置随机种子
             # setting record of experiments
             exp = Exp(args)  # set experiments
-            setting = '{}_{}_{}_{}_seq{}_ll{}_pred{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}_{}'.format(
+            # setting = '{}_{}_{}_{}_seq{}_ll{}_pred{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}_{}'.format(
+            #     # args.task_name,
+            #     args.model_id, args.data, args.model, args.features,
+            #     args.seq_len, args.label_len, args.pred_len,
+            #     args.d_model, args.n_heads, args.e_layers, args.d_layers, args.d_ff,
+            #     args.expand, args.d_conv, args.factor, args.embed, args.distil, args.des, ii)
+            setting='{}_{}_{}_{}_seq{}_ll{}_pred{}_loss{}_seq_norm{}_epoch{}_{}_res{}_kernel{}_period{}_{}'.format(
                 # args.task_name,
                 args.model_id, args.data, args.model, args.features,
                 args.seq_len, args.label_len, args.pred_len,
-                args.d_model, args.n_heads, args.e_layers, args.d_layers, args.d_ff,
-                args.expand, args.d_conv, args.factor, args.embed, args.distil, args.des, ii)
+                args.loss, args.seq_norm, args.train_epochs,
+                args.decomp_method, args.resid, args.kernel_size, args.period,ii)
+            # print(set)
             # print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
             exp.train(setting)
             # print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-            exp.test(setting)
+            dimension_mape, date_mape=exp.test(setting)
             torch.cuda.empty_cache()
     else:
         ii = 0
@@ -74,13 +95,28 @@ def run(args):
             args.expand, args.d_conv, args.factor, args.embed, args.distil, args.des, ii)
         exp = Exp(args)  # set experiments
         # print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-        exp.test(setting)
+        dimension_mape, date_mape=exp.test(setting)
         torch.cuda.empty_cache()
+    return dimension_mape, date_mape
+
+
+def run_and_plot(args, param_name, param_values, fix_seed,DAY=96):
+    all_dimension_mape = []
+    all_date_mape = []
+
+    for value in param_values:
+        setattr(args, param_name, value)  # 动态设置参数
+        print(f"{param_name}={value}", end=' ')
+        dimension_mape, date_mape = run(args, fix_seed)
+        all_dimension_mape.append(dimension_mape)
+        all_date_mape.append(date_mape)
+
+    plot_combined_mape(args, all_dimension_mape, all_date_mape, param_name, param_values,DAY)
+
+
 if __name__ == '__main__':
     fix_seed = 2021
-    random.seed(fix_seed)
-    torch.manual_seed(fix_seed)
-    np.random.seed(fix_seed)
+    torch.cuda.empty_cache()
 
     parser = argparse.ArgumentParser(description='TimesNet')
 
@@ -118,10 +154,18 @@ if __name__ == '__main__':
     parser.add_argument('--anomaly_ratio', type=float, default=0.25, help='prior anomaly ratio (%)')
 
     parser.add_argument('--seq_norm', type=str, default='RevIN', help='batch_norm used in NN，options: [None,Diff,RevIN]')
-    # model define
+    # decomposition define
+    parser.add_argument('--top_k', type=int, default=5, help='for TimesBlock and DFTSeriesDecomposition')
+    parser.add_argument('--kernel_size', type=int, default=25, help='window size of moving average')
+    parser.add_argument('--period', type=int, default=96, help='seasonal period of STL')
+    parser.add_argument('--decomp_method', type=str, default='MA1',
+                        help='method of series decompsition, support moving_avg or dft_decomp')
+    parser.add_argument('--resid', type=str, default='None', help='分解后是否将残差分量丢弃，不丢弃即加到季节性或趋势性中')
+    parser.add_argument('--trend_dec_times', type=int, default=1,help='times of trend decomposition')
+
+                        # model define
     parser.add_argument('--expand', type=int, default=2, help='expansion factor for Mamba')
     parser.add_argument('--d_conv', type=int, default=4, help='conv kernel size for Mamba')
-    parser.add_argument('--top_k', type=int, default=5, help='for TimesBlock')
     parser.add_argument('--num_kernels', type=int, default=6, help='for Inception')
     parser.add_argument('--enc_in', type=int, default=7, help='encoder input size')
     parser.add_argument('--dec_in', type=int, default=7, help='decoder input size')
@@ -131,7 +175,6 @@ if __name__ == '__main__':
     parser.add_argument('--e_layers', type=int, default=2, help='num of encoder layers')
     parser.add_argument('--d_layers', type=int, default=1, help='num of decoder layers')
     parser.add_argument('--d_ff', type=int, default=2048, help='dimension of fcn')
-    parser.add_argument('--moving_avg', type=int, default=25, help='window size of moving average')
     parser.add_argument('--factor', type=int, default=3, help='attn factor')
     parser.add_argument('--distil', action='store_false',
                         help='whether to use distilling in encoder, using this argument means not using distilling',
@@ -143,8 +186,6 @@ if __name__ == '__main__':
     parser.add_argument('--output_attention', action='store_true', help='whether to output attention in ecoder')
     parser.add_argument('--channel_independence', type=int, default=1,
                         help='0: channel dependence 1: channel independence for FreTS model')
-    parser.add_argument('--decomp_method', type=str, default='moving_avg',
-                        help='method of series decompsition, only support moving_avg or dft_decomp')
     parser.add_argument('--use_norm', type=int, default=1, help='whether to use normalize; True 1 False 0')
     parser.add_argument('--down_sampling_layers', type=int, default=0, help='num of down sampling layers')
     parser.add_argument('--down_sampling_window', type=int, default=1, help='down sampling window size')
@@ -223,13 +264,15 @@ if __name__ == '__main__':
 
     for args.model in [
         'DLinear',
-        'ModernTCN',
-        'TSMixer',
-        'PatchTST',
-        'TiDE',
-        'iTransformer',
-        'LightTS',
-        'SegRNN',
+        # 'ModernTCN',
+        # 'TSMixer',
+        # 'PatchTST',
+        #
+        # 'TiDE',
+        # 'iTransformer',
+        # 'LightTS',
+
+        # 'SegRNN',
 
         # 'TimesNet',
         # 'Autoformer',
@@ -243,17 +286,36 @@ if __name__ == '__main__':
         # #bug
         # 'TimeMixer',
     ]:
-        args.load_model=False
+        # args.load_model=False
+        args.itr=1
         # for args.label_len in [0,DAY//2,DAY,DAY*2]:
         #     print(f"label_len: {args.label_len}",end=' ')
-        #     run(args)
-        # for args.seq_norm in ['Diff']:#'None',,'RevIN'
+
+        # for args.seq_norm in ['None','Diff','RevIN']:#
         #     print(f"seq_norm: {args.seq_norm}",end=' ')
-        #     run(args)
-        for args.loss in ['MAE','SMAPE','MASE','MSE']:
-            print(f"loss: {args.loss}",end=' ')
-            try:
-                run(args)
-            except Exception as e:
-                print(f"Model {args.model} encountered an error: {e}")
-                continue
+
+        # for args.loss in ['MSE','MAE',]:
+        #     print(f"loss: {args.loss}",end=' ')
+
+        # for args.decomp_method in ['DFT',]:#'MA1','MA2','STL',
+        #     print(f"{args.decomp_method}",end=' ')
+
+        # for args.resid in ['None','trend','seasonal']:
+        #     print(f"resid: {args.resid}",end=' ')
+        #     run(args, fix_seed)
+
+        # for args.trend_dec_times in [1,2,3,4,5,6]:
+        #     print(f"trend_dec_times: {args.trend_dec_times}",end=' ')
+        #     run(args, fix_seed)
+
+        args.decomp_method = 'MA2'
+        args.resid = 'trend'
+        for args.resid in ['seasonal','None','trend',]:
+            for args.kernel_size in [9,25, 49, 97]:#
+                print(f"{args.decomp_method} resid={args.resid} {args.kernel_size}")
+                param_name= 'period'
+                param_values = [DAY//2,DAY,DAY*2,DAY*4]#
+                run_and_plot(args, param_name, param_values, fix_seed, DAY=96)
+
+
+
